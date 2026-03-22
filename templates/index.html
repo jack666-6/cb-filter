@@ -612,6 +612,22 @@ function renderStockKline(data) {
     color: +d.close >= +d.open ? 'rgba(248,81,73,0.35)' : 'rgba(63,185,80,0.35)',
   })));
 
+  // 均線計算
+  function calcMA(arr, n) {
+    return arr.map((d, i) => {
+      if (i < n - 1) return null;
+      const avg = arr.slice(i - n + 1, i + 1).reduce((s, x) => s + x.close, 0) / n;
+      return { time: d.date, value: +avg.toFixed(2) };
+    }).filter(Boolean);
+  }
+  const closes = data.map(d => ({ date: d.date, close: +d.close }));
+  const ma5  = chart.addLineSeries({ color: '#f0e68c', lineWidth: 1, title: 'MA5',  priceScaleId: 'right' });
+  const ma20 = chart.addLineSeries({ color: '#ff8c00', lineWidth: 1, title: 'MA20', priceScaleId: 'right' });
+  const ma60 = chart.addLineSeries({ color: '#00bfff', lineWidth: 1, title: 'MA60', priceScaleId: 'right' });
+  ma5.setData(calcMA(closes, 5));
+  ma20.setData(calcMA(closes, 20));
+  ma60.setData(calcMA(closes, 60));
+
   chart.timeScale().fitContent();
   lw['stock'] = chart;
   new ResizeObserver(() => chart.applyOptions({ width: el.clientWidth })).observe(el);

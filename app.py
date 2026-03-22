@@ -136,10 +136,15 @@ def cb_price(cid):
         SELECT
             cp.date::text AS date,
             cp.reference_price,
-            ROUND(((sp.close / NULLIF(cp.conversion_price,0)) * 100)::numeric, 2) AS theoretical
+            ROUND(((sp.close / NULLIF(cl.conversion_price,0)) * 100)::numeric, 2) AS theoretical
         FROM cb_price cp
         LEFT JOIN stock_price sp
                ON cp.stock_id = sp.stock_id AND cp.date = sp.date
+        LEFT JOIN (
+            SELECT DISTINCT ON (cb_id) cb_id, conversion_price
+            FROM cb_list
+            ORDER BY cb_id, updated_date DESC
+        ) cl ON cp.cb_id = cl.cb_id
         WHERE cp.cb_id = %s
         ORDER BY cp.date DESC
         LIMIT %s
