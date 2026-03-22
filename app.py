@@ -31,6 +31,16 @@ def db(sql: str, params=None) -> pd.DataFrame:
         conn.close()
 
 
+@app.errorhandler(500)
+def handle_500(e):
+    return jsonify({"error": str(e)}), 500
+
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    return jsonify({"error": str(e)}), 500
+
+
 # ── 首頁 ───────────────────────────────────────────────────────────────────
 @app.route("/")
 def index():
@@ -173,6 +183,26 @@ def margin(sid):
 @app.route("/health")
 def health():
     return jsonify({"status": "ok"})
+
+
+# ── 除錯：資料庫連線與資料表筆數 ──────────────────────────────────────
+@app.route("/debug")
+def debug():
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        tables = ["cb_list", "cb_price", "stock_price", "institutional", "shareholding", "margin"]
+        counts = {}
+        for t in tables:
+            try:
+                cur.execute(f"SELECT COUNT(*) FROM {t}")
+                counts[t] = cur.fetchone()[0]
+            except Exception as e:
+                counts[t] = f"ERROR: {e}"
+        conn.close()
+        return jsonify({"status": "ok", "db_url_prefix": _DATABASE_URL[:40], "counts": counts})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
 
 
 if __name__ == "__main__":
