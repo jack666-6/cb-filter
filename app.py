@@ -4,6 +4,7 @@ app.py - CB 籌碼分析平台（雲端 PostgreSQL 版）
 部署於 Render.com，資料庫為 Supabase PostgreSQL。
 """
 import os
+import math
 from flask import Flask, jsonify, request, render_template
 import pandas as pd
 import psycopg2
@@ -19,6 +20,17 @@ if _DATABASE_URL.startswith("postgresql://"):
 
 def _get_conn():
     return psycopg2.connect(_DATABASE_URL)
+
+
+def clean_records(records):
+    """將 NaN/Inf 換成 None，避免 JSON 序列化失敗"""
+    cleaned = []
+    for row in records:
+        cleaned.append({
+            k: (None if isinstance(v, float) and (math.isnan(v) or math.isinf(v)) else v)
+            for k, v in row.items()
+        })
+    return cleaned
 
 
 def db(sql: str, params=None) -> pd.DataFrame:
@@ -149,8 +161,7 @@ def cb_price(cid):
         ORDER BY cp.date DESC
         LIMIT %s
     """, [cid, n])
-    df = df.where(pd.notna(df), None)
-    return jsonify(df.sort_values("date").to_dict("records"))
+    return jsonify(clean_records(df.sort_values("date").to_dict("records")))
 
 
 # ── 大戶 / 散戶 / 股東人數 ──────────────────────────────────────────────
@@ -162,8 +173,7 @@ def shareholding(sid):
         "FROM shareholding WHERE stock_id=%s ORDER BY date DESC LIMIT %s",
         [sid, n]
     )
-    df = df.where(pd.notna(df), None)
-    return jsonify(df.sort_values("date").to_dict("records"))
+    return jsonify(clean_records(df.sort_values("date").to_dict("records")))
 
 
 # ── 三大法人 ────────────────────────────────────────────────────────────
