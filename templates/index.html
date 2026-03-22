@@ -621,12 +621,37 @@ function renderStockKline(data) {
     }).filter(Boolean);
   }
   const closes = data.map(d => ({ date: d.date, close: +d.close }));
-  const ma5  = chart.addLineSeries({ color: '#e67e22', lineWidth: 1, title: 'MA5',  priceLineVisible: false, lastValueVisible: false });
-  const ma20 = chart.addLineSeries({ color: '#9b59b6', lineWidth: 1, title: 'MA20', priceLineVisible: false, lastValueVisible: false });
-  const ma60 = chart.addLineSeries({ color: '#2980b9', lineWidth: 1, title: 'MA60', priceLineVisible: false, lastValueVisible: false });
-  ma5.setData(calcMA(closes, 5));
-  ma20.setData(calcMA(closes, 20));
-  ma60.setData(calcMA(closes, 60));
+  const MA_COLORS = { ma5: '#e67e22', ma20: '#9b59b6', ma60: '#2980b9' };
+  const ma5  = chart.addLineSeries({ color: MA_COLORS.ma5,  lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+  const ma20 = chart.addLineSeries({ color: MA_COLORS.ma20, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+  const ma60 = chart.addLineSeries({ color: MA_COLORS.ma60, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+  const ma5d  = calcMA(closes, 5);
+  const ma20d = calcMA(closes, 20);
+  const ma60d = calcMA(closes, 60);
+  ma5.setData(ma5d);
+  ma20.setData(ma20d);
+  ma60.setData(ma60d);
+
+  // 左上角 MA 圖例
+  const legend = document.createElement('div');
+  legend.style.cssText = 'position:absolute;top:8px;left:10px;z-index:10;display:flex;gap:8px;font-size:11px;font-weight:600;pointer-events:none;';
+  const mkTag = (label, color, val) => `<span style="background:${color};color:#fff;padding:2px 7px;border-radius:4px;">${label} <span class="mv">${val}</span></span>`;
+  const lastOf = arr => arr.length ? arr[arr.length-1].value.toFixed(2) : '—';
+  legend.innerHTML = mkTag('MA5', MA_COLORS.ma5, lastOf(ma5d)) + mkTag('MA20', MA_COLORS.ma20, lastOf(ma20d)) + mkTag('MA60', MA_COLORS.ma60, lastOf(ma60d));
+  el.style.position = 'relative';
+  el.appendChild(legend);
+
+  // 滑鼠移動時更新圖例數值
+  const toMap = arr => Object.fromEntries(arr.map(d => [d.time, d.value]));
+  const m5 = toMap(ma5d), m20 = toMap(ma20d), m60 = toMap(ma60d);
+  chart.subscribeCrosshairMove(p => {
+    if (!p.time) return;
+    const t = p.time;
+    const tags = legend.querySelectorAll('.mv');
+    if (tags[0]) tags[0].textContent = m5[t]  != null ? (+m5[t]).toFixed(2)  : '—';
+    if (tags[1]) tags[1].textContent = m20[t] != null ? (+m20[t]).toFixed(2) : '—';
+    if (tags[2]) tags[2].textContent = m60[t] != null ? (+m60[t]).toFixed(2) : '—';
+  });
 
   chart.timeScale().fitContent();
   lw['stock'] = chart;
