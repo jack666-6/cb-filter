@@ -41,15 +41,16 @@ jobs:
 
       - name: 🗄️ 執行每日資料更新
         env:
-          DATABASE_URL:    ${{ secrets.DATABASE_URL }}
-          FINMIND_TOKEN:   ${{ secrets.FINMIND_TOKEN }}
+          DATABASE_URL:      ${{ secrets.DATABASE_URL }}
+          FINMIND_TOKEN:     ${{ secrets.FINMIND_TOKEN }}
+          PYTHONUNBUFFERED:  "1"
         run: |
           if [ "${{ github.event.inputs.init_mode }}" = "true" ]; then
             echo "=== 初始化模式：下載 ${{ github.event.inputs.init_years }} 年歷史資料 ==="
-            python db_updater.py --init --years ${{ github.event.inputs.init_years }}
+            python -u db_updater.py --init --years ${{ github.event.inputs.init_years }}
           else
             echo "=== 每日增量更新 ==="
-            python db_updater.py
+            python -u db_updater.py
           fi
 
       - name: ✅ 更新完成通知
