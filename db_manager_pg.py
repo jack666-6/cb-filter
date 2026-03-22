@@ -12,7 +12,7 @@ from datetime import datetime
 import psycopg2
 import psycopg2.extras
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "")
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 # Render 提供的 URL 開頭是 postgres:// ，SQLAlchemy / psycopg2 需要 postgresql://
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
