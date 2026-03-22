@@ -590,6 +590,7 @@ function renderStockKline(data) {
     width: el.clientWidth,
     height: 300,
     crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    timeScale: { minBarSpacing: 0.5, rightOffset: 5 },
   });
 
   const candle = chart.addCandlestickSeries({
