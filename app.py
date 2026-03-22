@@ -166,7 +166,7 @@ def api_cbs():
 # ── 個股 K 線 ────────────────────────────────────────────────────────────
 @app.route("/api/stock/<sid>/kline")
 def stock_kline(sid):
-    n = request.args.get("days", 120, type=int)
+    n = request.args.get("days", 1000, type=int)
     key = f"kline_{sid}_{n}"
     cached = cache_get(key)
     if cached is not None:
@@ -184,7 +184,7 @@ def stock_kline(sid):
 # ── CB 價格走勢（含理論價）──────────────────────────────────────────────
 @app.route("/api/cb/<cid>/price")
 def cb_price(cid):
-    n = request.args.get("days", 120, type=int)
+    n = request.args.get("days", 1000, type=int)
     key = f"cbprice_{cid}_{n}"
     cached = cache_get(key)
     if cached is not None:
@@ -231,7 +231,7 @@ def shareholding(sid):
 # ── 三大法人 ────────────────────────────────────────────────────────────
 @app.route("/api/stock/<sid>/inst")
 def inst(sid):
-    n = request.args.get("days", 60, type=int)
+    n = request.args.get("days", 1000, type=int)
     key = f"inst_{sid}_{n}"
     cached = cache_get(key)
     if cached is not None:
@@ -249,7 +249,7 @@ def inst(sid):
 # ── 融資融券 ────────────────────────────────────────────────────────────
 @app.route("/api/stock/<sid>/margin")
 def margin(sid):
-    n = request.args.get("days", 60, type=int)
+    n = request.args.get("days", 1000, type=int)
     key = f"margin_{sid}_{n}"
     cached = cache_get(key)
     if cached is not None:
