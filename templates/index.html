@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CB 籌碼分析</title>
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:     #0d1117;
+  --bg2:    #161b22;
+  --bg3:    #21262d;
+  --border: #30363d;
+  --text:   #e6edf3;
+  --muted:  #8b949e;
+  --blue:   #58a6ff;
+  --green:  #3fb950;
+  --red:    #f85149;
+  --yellow: #d29922;
+  --purple: #bc8cff;
+}
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans TC', sans-serif;
+  font-size: 14px;
+}
+
+/* ── Header ── */
+.header {
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  padding: 0 20px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  position: sticky;
+  top: 0;
+  z-index: 200;
+}
+.header h1 { font-size: 16px; font-weight: 700; color: var(--text); }
+.header-sub { font-size: 12px; color: var(--muted); }
+
+/* ── Strip (水平長條面板) ── */
+.strip {
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+}
+.strip-title {
+  padding: 10px 20px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.strip-body { padding: 14px 20px; }
+
+/* ── Filter ── */
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-end;
+}
+.fg { display: flex; flex-direction: column; gap: 5px; }
+.fg label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; }
+.fg .row { display: flex; align-items: center; gap: 6px; }
+input[type=number] {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 5px 10px;
+  border-radius: 6px;
+  width: 80px;
+  font-size: 13px;
+  outline: none;
+}
+input[type=number]:focus { border-color: var(--blue); }
+.sep { color: var(--muted); font-size: 12px; }
+.preset-row { display: flex; gap: 5px; flex-wrap: wrap; }
+.btn-preset {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 4px 11px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.15s;
+}
+.btn-preset:hover { border-color: var(--blue); color: var(--blue); }
+.btn-preset.active { background: #1f3352; border-color: var(--blue); color: var(--blue); }
+.btn-search {
+  background: var(--blue);
+  border: none;
+  color: #fff;
+  padding: 6px 18px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: opacity 0.15s;
+}
+.btn-search:hover { opacity: 0.85; }
+.btn-clear {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.15s;
+}
+.btn-clear:hover { border-color: var(--muted); color: var(--text); }
+
+/* ── Table ── */
+.table-wrap { overflow-x: auto; max-height: 380px; overflow-y: auto; }
+table { width: 100%; border-collapse: collapse; min-width: 900px; }
+thead { position: sticky; top: 0; z-index: 10; }
+th {
+  background: var(--bg3);
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+th:hover { color: var(--text); }
+th.sort-asc::after  { content: ' ▲'; color: var(--blue); }
+th.sort-desc::after { content: ' ▼'; color: var(--blue); }
+td {
+  padding: 9px 12px;
+  border-bottom: 1px solid rgba(48,54,61,0.5);
+  font-size: 13px;
+  white-space: nowrap;
+}
+tr:hover td { background: rgba(88,166,255,0.05); cursor: pointer; }
+tr.selected td { background: rgba(88,166,255,0.1) !important; }
+.cb-id   { font-weight: 700; color: var(--blue); }
+.cb-name { color: var(--muted); font-size: 12px; }
+.pos { color: var(--red); }
+.neg { color: var(--green); }
+.pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.pill-red  { background: rgba(248,81,73,0.15);  color: var(--red); }
+.pill-blue { background: rgba(88,166,255,0.15); color: var(--blue); }
+.pill-grn  { background: rgba(63,185,80,0.15);  color: var(--green); }
+.empty { text-align: center; padding: 48px; color: var(--muted); font-size: 13px; }
+.loading-row td { text-align: center; padding: 32px; color: var(--muted); }
+
+/* ── Detail section ── */
+#detailSection { display: none; }
+#detailSection.visible { display: block; }
+.detail-header {
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.detail-header .cb-tag {
+  background: #1f3352;
+  border: 1px solid var(--blue);
+  color: var(--blue);
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.detail-header .stock-tag {
+  color: var(--muted);
+  font-size: 13px;
+}
+.detail-header .detail-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* ── Chart rows ── */
+.chart-row {
+  display: grid;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+}
+.chart-row-2 { grid-template-columns: 1fr 1fr; }
+.chart-row-6040 { grid-template-columns: 3fr 2fr; }
+.chart-cell {
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+  min-width: 0;
+}
+.chart-cell:last-child { border-right: none; }
+.chart-cell-title {
+  padding: 9px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  border-bottom: 1px solid var(--border);
+}
+.chart-cell-body { padding: 8px; }
+.lw-wrap { width: 100%; height: 300px; }
+.cj-wrap { position: relative; height: 260px; }
+.no-data {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--muted);
+  font-size: 12px;
+}
+@media (max-width: 800px) {
+  .chart-row-2, .chart-row-6040 { grid-template-columns: 1fr; }
+  .chart-cell { border-right: none; border-bottom: 1px solid var(--border); }
+}
+</style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<div class="header">
+  <h1>📊 CB 籌碼分析</h1>
+  <span class="header-sub" id="dbDate"></span>
+</div>
+
+<!-- ── Strip 1: 篩選條件 ── -->
+<div class="strip">
+  <div class="strip-title">🔍 篩選條件</div>
+  <div class="strip-body">
+    <div class="filter-row">
+
+      <!-- 溢價率 -->
+      <div class="fg">
+        <label>溢價率 (%)</label>
+        <div class="row">
+          <input type="number" id="pmin" placeholder="最低" step="0.1" style="width:75px">
+          <span class="sep">~</span>
+          <input type="number" id="pmax" placeholder="最高" step="0.1" style="width:75px">
+        </div>
+        <div class="preset-row" style="margin-top:4px">
+          <button class="btn-preset" onclick="setPremiumPreset(-5,0,this)">-5~0%</button>
+          <button class="btn-preset" onclick="setPremiumPreset(0,5,this)">0~5%</button>
+          <button class="btn-preset" onclick="setPremiumPreset(5,15,this)">5~15%</button>
+          <button class="btn-preset" onclick="setPremiumPreset(15,null,this)">15%+</button>
+        </div>
+      </div>
+
+      <!-- CB 價格 -->
+      <div class="fg">
+        <label>CB 現價</label>
+        <div class="row">
+          <input type="number" id="cmin" placeholder="最低" step="0.5" style="width:75px">
+          <span class="sep">~</span>
+          <input type="number" id="cmax" placeholder="最高" step="0.5" style="width:75px">
+        </div>
+        <div class="preset-row" style="margin-top:4px">
+          <button class="btn-preset" onclick="setCBPreset(100,110,this)">100~110</button>
+          <button class="btn-preset" onclick="setCBPreset(110,115,this)">110~115</button>
+          <button class="btn-preset" onclick="setCBPreset(115,120,this)">115~120</button>
+          <button class="btn-preset" onclick="setCBPreset(120,null,this)">120以上</button>
+        </div>
+      </div>
+
+      <!-- 執行按鈕 -->
+      <div class="fg">
+        <label>&nbsp;</label>
+        <div class="row" style="gap:8px">
+          <button class="btn-search" onclick="applyFilter()">篩選</button>
+          <button class="btn-clear"  onclick="clearFilter()">清除</button>
+        </div>
+      </div>
+
+      <!-- 結果統計 -->
+      <div class="fg" style="margin-left:auto; text-align:right">
+        <label>結果</label>
+        <div style="font-size:20px; font-weight:700; color:var(--blue)" id="cbCount">—</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ── Strip 2: CB 列表 ── -->
+<div class="strip">
+  <div class="strip-title">📋 CB 列表（點選查看詳情）</div>
+  <div class="table-wrap" id="tableWrap">
+    <table><tbody><tr class="loading-row"><td colspan="11">載入中…</td></tr></tbody></table>
+  </div>
+</div>
+
+<!-- ── Detail section ── -->
+<div id="detailSection">
+
+  <!-- Detail header -->
+  <div class="detail-header">
+    <span class="cb-tag" id="dCbId">—</span>
+    <span class="detail-name" id="dCbName">—</span>
+    <span class="stock-tag">股票：<strong id="dStockId">—</strong></span>
+    <span class="stock-tag">現價：<strong id="dCbPrice">—</strong></span>
+    <span class="stock-tag">溢價率：<strong id="dPremium">—</strong></span>
+    <span class="stock-tag">到期：<strong id="dDueDate">—</strong></span>
+  </div>
+
+  <!-- Row 1: 股票K線 | CB價格 -->
+  <div class="chart-row chart-row-2">
+    <div class="chart-cell">
+      <div class="chart-cell-title">🕯️ 個股 K 線（含成交量）</div>
+      <div class="chart-cell-body"><div class="lw-wrap" id="stockKline"></div></div>
+    </div>
+    <div class="chart-cell">
+      <div class="chart-cell-title">📈 CB 市價 vs 理論價</div>
+      <div class="chart-cell-body"><div class="lw-wrap" id="cbPrice"></div></div>
+    </div>
+  </div>
+
+  <!-- Row 2: 大戶散戶 | 股東人數 -->
+  <div class="chart-row chart-row-6040">
+    <div class="chart-cell">
+      <div class="chart-cell-title">👥 大戶 / 散戶 持股比例（週資料）</div>
+      <div class="chart-cell-body"><div class="cj-wrap"><canvas id="chipChart"></canvas></div></div>
+    </div>
+    <div class="chart-cell">
+      <div class="chart-cell-title">🏠 股東人數趨勢</div>
+      <div class="chart-cell-body"><div class="cj-wrap"><canvas id="holdersChart"></canvas></div></div>
+    </div>
+  </div>
+
+  <!-- Row 3: 三大法人 | 融資融券 -->
+  <div class="chart-row chart-row-2">
+    <div class="chart-cell">
+      <div class="chart-cell-title">🏦 三大法人買賣超（張）</div>
+      <div class="chart-cell-body"><div class="cj-wrap"><canvas id="instChart"></canvas></div></div>
+    </div>
+    <div class="chart-cell">
+      <div class="chart-cell-title">💰 融資 / 融券 餘額</div>
+      <div class="chart-cell-body"><div class="cj-wrap"><canvas id="marginChart"></canvas></div></div>
+    </div>
+  </div>
+
+</div><!-- /detailSection -->
+
+<div style="height:40px"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════
+   State
+═══════════════════════════════════════════════════════ */
+const lw = {};   // lightweight-charts instances  { key: chart }
+const cj = {};   // chart.js instances            { key: chart }
+let tableData = [];
+let sortKey = null, sortAsc = true;
+
+/* ═══════════════════════════════════════════════════════
+   Utils
+═══════════════════════════════════════════════════════ */
+const $ = id => document.getElementById(id);
+const fmt = (v, d=2) => v == null ? '—' : Number(v).toFixed(d);
+const fmtN = v => v == null ? '—' : Number(v).toLocaleString();
+
+function fmtPrem(v) {
+  if (v == null) return '<span style="color:var(--muted)">—</span>';
+  const n = Number(v);
+  const cls = n > 0 ? 'pos' : n < 0 ? 'neg' : '';
+  return `<span class="${cls}">${n > 0 ? '+' : ''}${n.toFixed(2)}%</span>`;
+}
+
+function destroyCharts() {
+  Object.keys(lw).forEach(k => { try { lw[k].remove(); } catch(e){} delete lw[k]; });
+  Object.keys(cj).forEach(k => { try { cj[k].destroy(); } catch(e){} delete cj[k]; });
+}
+
+const CJ_OPTS = {
+  responsive: true,
+  maintainAspectRatio: false,
+  animation: false,
+  plugins: {
+    legend: { labels: { color: '#8b949e', boxWidth: 12, font: { size: 11 } } },
+    tooltip: { mode: 'index', intersect: false }
+  },
+  scales: {
+    x: { ticks: { color: '#8b949e', maxTicksLimit: 8, font: { size: 10 } }, grid: { color: '#21262d' } },
+    y: { ticks: { color: '#8b949e', font: { size: 10 } }, grid: { color: '#21262d' } }
+  }
+};
+
+const LW_THEME = {
+  layout: { background: { color: '#161b22' }, textColor: '#8b949e' },
+  grid:   { vertLines: { color: '#21262d' }, horzLines: { color: '#21262d' } },
+  rightPriceScale: { borderColor: '#30363d' },
+  timeScale: { borderColor: '#30363d', timeVisible: false }
+};
+
+/* ═══════════════════════════════════════════════════════
+   Filter
+═══════════════════════════════════════════════════════ */
+function setPremiumPreset(min, max, btn) {
+  $('pmin').value = min ?? ''; $('pmax').value = max ?? '';
+  document.querySelectorAll('.fg:first-child .btn-preset').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  applyFilter();
+}
+function setCBPreset(min, max, btn) {
+  $('cmin').value = min ?? ''; $('cmax').value = max ?? '';
+  document.querySelectorAll('.fg:nth-child(2) .btn-preset').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  applyFilter();
+}
+function clearFilter() {
+  ['pmin','pmax','cmin','cmax'].forEach(id => $(id).value = '');
+  document.querySelectorAll('.btn-preset').forEach(b => b.classList.remove('active'));
+  loadCBList();
+}
+function applyFilter() {
+  const p = new URLSearchParams();
+  if ($('pmin').value) p.set('premium_min', $('pmin').value);
+  if ($('pmax').value) p.set('premium_max', $('pmax').value);
+  if ($('cmin').value) p.set('cb_price_min', $('cmin').value);
+  if ($('cmax').value) p.set('cb_price_max', $('cmax').value);
+  loadCBList(p.toString());
+}
+
+/* ═══════════════════════════════════════════════════════
+   CB List
+═══════════════════════════════════════════════════════ */
+async function loadCBList(query = '') {
+  $('tableWrap').innerHTML = '<table><tbody><tr class="loading-row"><td colspan="11">載入中…</td></tr></tbody></table>';
+  try {
+    const res = await fetch('/api/cbs' + (query ? '?' + query : ''));
+    tableData = await res.json();
+    renderTable(tableData);
+  } catch(e) {
+    $('tableWrap').innerHTML = `<div class="empty">載入失敗：${e.message}</div>`;
+  }
+}
+
+const COLS = [
+  { key:'cb_id',       label:'CB 代號' },
+  { key:'cb_name',     label:'名稱' },
+  { key:'stock_id',    label:'股票' },
+  { key:'cb_price',    label:'CB 現價' },
+  { key:'stock_close', label:'股票現價' },
+  { key:'conversion_price', label:'轉換價' },
+  { key:'premium',     label:'溢價率' },
+  { key:'due_date',    label:'到期日' },
+  { key:'big',         label:'大戶%' },
+  { key:'small',       label:'散戶%' },
+  { key:'holders',     label:'股東人數' },
+];
+
+function sortBy(key) {
+  if (sortKey === key) sortAsc = !sortAsc;
+  else { sortKey = key; sortAsc = true; }
+  const sorted = [...tableData].sort((a, b) => {
+    const av = a[key], bv = b[key];
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    return sortAsc ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1);
+  });
+  renderTable(sorted, true);
+}
+
+function renderTable(data, skipCountUpdate = false) {
+  if (!skipCountUpdate) $('cbCount').textContent = data.length;
+
+  if (!data.length) {
+    $('tableWrap').innerHTML = '<div class="empty">沒有符合條件的 CB</div>';
+    return;
+  }
+
+  const ths = COLS.map(c => {
+    let cls = '';
+    if (sortKey === c.key) cls = sortAsc ? 'sort-asc' : 'sort-desc';
+    return `<th class="${cls}" onclick="sortBy('${c.key}')">${c.label}</th>`;
+  }).join('');
+
+  const rows = data.map(d => {
+    const premHtml = d.premium != null
+      ? `<span class="${d.premium > 0 ? 'pos' : 'neg'}">${d.premium > 0 ? '+' : ''}${fmt(d.premium)}%</span>`
+      : '<span style="color:var(--muted)">—</span>';
+    return `<tr onclick="selectCB(this,'${d.cb_id}','${d.stock_id}',${JSON.stringify(d).replace(/'/g,"\\'")})"
+               data-cbid="${d.cb_id}">
+      <td><span class="cb-id">${d.cb_id}</span></td>
+      <td><span class="cb-name">${d.cb_name || '—'}</span></td>
+      <td>${d.stock_id}</td>
+      <td><strong>${fmt(d.cb_price)}</strong></td>
+      <td>${fmt(d.stock_close)}</td>
+      <td>${fmt(d.conversion_price)}</td>
+      <td>${premHtml}</td>
+      <td style="color:var(--muted)">${d.due_date ? d.due_date.slice(0,10) : '—'}</td>
+      <td>${d.big != null ? `<span class="pill pill-red">${fmt(d.big)}%</span>` : '—'}</td>
+      <td>${d.small != null ? `<span class="pill pill-grn">${fmt(d.small)}%</span>` : '—'}</td>
+      <td>${fmtN(d.holders)}</td>
+    </tr>`;
+  }).join('');
+
+  $('tableWrap').innerHTML = `
+    <table>
+      <thead><tr>${ths}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Select CB → load detail
+═══════════════════════════════════════════════════════ */
+function selectCB(row, cbId, stockId, d) {
+  document.querySelectorAll('tbody tr').forEach(r => r.classList.remove('selected'));
+  row.classList.add('selected');
+
+  // Update header
+  $('dCbId').textContent   = cbId;
+  $('dCbName').textContent = d.cb_name || '';
+  $('dStockId').textContent = stockId;
+  $('dCbPrice').textContent = fmt(d.cb_price);
+  $('dPremium').textContent = d.premium != null ? (d.premium > 0 ? '+' : '') + fmt(d.premium) + '%' : '—';
+  $('dDueDate').textContent = d.due_date ? d.due_date.slice(0,10) : '—';
+
+  $('detailSection').classList.add('visible');
+  $('detailSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  loadDetail(cbId, stockId);
+}
+
+async function loadDetail(cbId, stockId) {
+  destroyCharts();
+  // Reset chart containers
+  $('stockKline').innerHTML = $('cbPrice').innerHTML = '';
+  ['chipChart','holdersChart','instChart','marginChart'].forEach(id => {
+    const el = $(id);
+    const wrap = el.parentElement;
+    wrap.innerHTML = `<canvas id="${id}"></canvas>`;
+  });
+
+  const [kline, cbPriceData, shData, instData, marginData] = await Promise.all([
+    fetch(`/api/stock/${stockId}/kline?days=120`).then(r => r.json()).catch(() => []),
+    fetch(`/api/cb/${cbId}/price?days=120`).then(r => r.json()).catch(() => []),
+    fetch(`/api/stock/${stockId}/shareholding?weeks=60`).then(r => r.json()).catch(() => []),
+    fetch(`/api/stock/${stockId}/inst?days=60`).then(r => r.json()).catch(() => []),
+    fetch(`/api/stock/${stockId}/margin?days=60`).then(r => r.json()).catch(() => []),
+  ]);
+
+  renderStockKline(kline);
+  renderCBPrice(cbPriceData);
+  renderChip(shData);
+  renderHolders(shData);
+  renderInst(instData);
+  renderMargin(marginData);
+}
+
+/* ═══════════════════════════════════════════════════════
+   Chart 1: 個股 K 線 (lightweight-charts)
+═══════════════════════════════════════════════════════ */
+function renderStockKline(data) {
+  const el = $('stockKline');
+  if (!data.length) { el.innerHTML = '<div class="no-data">無股價資料</div>'; return; }
+
+  const chart = LightweightCharts.createChart(el, {
+    ...LW_THEME,
+    width: el.clientWidth,
+    height: 300,
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+  });
+
+  const candle = chart.addCandlestickSeries({
+    upColor: '#f85149', downColor: '#3fb950',
+    borderUpColor: '#f85149', borderDownColor: '#3fb950',
+    wickUpColor:   '#f85149', wickDownColor:   '#3fb950',
+  });
+  candle.setData(data.map(d => ({
+    time: d.date, open: +d.open, high: +d.high, low: +d.low, close: +d.close
+  })));
+
+  const vol = chart.addHistogramSeries({
+    priceFormat: { type: 'volume' },
+    priceScaleId: 'vol',
+  });
+  chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
+  vol.setData(data.map(d => ({
+    time: d.date,
+    value: +d.volume,
+    color: +d.close >= +d.open ? 'rgba(248,81,73,0.35)' : 'rgba(63,185,80,0.35)',
+  })));
+
+  chart.timeScale().fitContent();
+  lw['stock'] = chart;
+  new ResizeObserver(() => chart.applyOptions({ width: el.clientWidth })).observe(el);
+}
+
+/* ═══════════════════════════════════════════════════════
+   Chart 2: CB 市價 vs 理論價 (lightweight-charts)
+═══════════════════════════════════════════════════════ */
+function renderCBPrice(data) {
+  const el = $('cbPrice');
+  if (!data.length) { el.innerHTML = '<div class="no-data">無 CB 價格資料</div>'; return; }
+
+  const chart = LightweightCharts.createChart(el, {
+    ...LW_THEME,
+    width: el.clientWidth,
+    height: 300,
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+  });
+
+  const actual = chart.addLineSeries({ color: '#bc8cff', lineWidth: 2, title: 'CB市價' });
+  actual.setData(data.map(d => ({ time: d.date, value: +d.reference_price })));
+
+  const hasTheoretical = data.some(d => d.theoretical != null);
+  if (hasTheoretical) {
+    const theory = chart.addLineSeries({
+      color: '#58a6ff', lineWidth: 1.5,
+      lineStyle: LightweightCharts.LineStyle.Dashed,
+      title: '理論價',
+    });
+    theory.setData(
+      data.filter(d => d.theoretical != null)
+          .map(d => ({ time: d.date, value: +d.theoretical }))
+    );
+  }
+
+  chart.timeScale().fitContent();
+  lw['cb'] = chart;
+  new ResizeObserver(() => chart.applyOptions({ width: el.clientWidth })).observe(el);
+}
+
+/* ═══════════════════════════════════════════════════════
+   Chart 3: 大戶 / 散戶 持股比例 (Chart.js bar)
+═══════════════════════════════════════════════════════ */
+function renderChip(data) {
+  const el = $('chipChart');
+  if (!data.length) {
+    el.parentElement.innerHTML = '<div class="no-data">無籌碼資料</div>';
+    return;
+  }
+  const labels = data.map(d => d.date.slice(5));   // MM-DD
+  cj['chip'] = new Chart(el.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: '大戶持股%',
+          data: data.map(d => d.big_holder_pct),
+          backgroundColor: 'rgba(248,81,73,0.65)',
+          borderRadius: 2,
+        },
+        {
+          label: '散戶持股%',
+          data: data.map(d => d.retail_pct),
+          backgroundColor: 'rgba(63,185,80,0.65)',
+          borderRadius: 2,
+        },
+      ]
+    },
+    options: {
+      ...CJ_OPTS,
+      plugins: { ...CJ_OPTS.plugins, tooltip: { mode: 'index', intersect: false } },
+    }
+  });
+}
+
+/* ═══════════════════════════════════════════════════════
+   Chart 4: 股東人數 (Chart.js line)
+═══════════════════════════════════════════════════════ */
+function renderHolders(data) {
+  const el = $('holdersChart');
+  if (!data.length) {
+    el.parentElement.innerHTML = '<div class="no-data">無股東人數資料</div>';
+    return;
+  }
+  const labels = data.map(d => d.date.slice(5));
+  cj['holders'] = new Chart(el.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: '股東人數',
+        data: data.map(d => d.shareholders),
+        borderColor: '#d29922',
+        backgroundColor: 'rgba(210,153,34,0.1)',
+        borderWidth: 2,
+        pointRadius: 2,
+        fill: true,
+        tension: 0.3,
+      }]
+    },
+    options: {
+      ...CJ_OPTS,
+      scales: {
+        ...CJ_OPTS.scales,
+        y: {
+          ...CJ_OPTS.scales.y,
+          ticks: {
+            color: '#8b949e', font: { size: 10 },
+            callback: v => v >= 10000 ? (v/10000).toFixed(1)+'萬' : v
+          }
+        }
+      }
+    }
+  });
+}
+
+/* ═══════════════════════════════════════════════════════
+   Chart 5: 三大法人 (Chart.js bar)
+═══════════════════════════════════════════════════════ */
+function renderInst(data) {
+  const el = $('instChart');
+  if (!data.length) {
+    el.parentElement.innerHTML = '<div class="no-data">無法人資料</div>';
+    return;
+  }
+  const labels = data.map(d => d.date.slice(5));
+  cj['inst'] = new Chart(el.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: '外資',
+          data: data.map(d => d.foreign_net),
+          backgroundColor: data.map(d => (+d.foreign_net||0) >= 0 ? 'rgba(248,81,73,0.7)' : 'rgba(63,185,80,0.7)'),
+          borderRadius: 2,
+        },
+        {
+          label: '投信',
+          data: data.map(d => d.trust_net),
+          backgroundColor: data.map(d => (+d.trust_net||0) >= 0 ? 'rgba(88,166,255,0.7)' : 'rgba(88,166,255,0.35)'),
+          borderRadius: 2,
+        },
+        {
+          label: '自營商',
+          data: data.map(d => d.dealer_net),
+          backgroundColor: data.map(d => (+d.dealer_net||0) >= 0 ? 'rgba(188,140,255,0.7)' : 'rgba(188,140,255,0.35)'),
+          borderRadius: 2,
+        },
+      ]
+    },
+    options: CJ_OPTS,
+  });
+}
+
+/* ═══════════════════════════════════════════════════════
+   Chart 6: 融資融券 (Chart.js dual-axis line)
+═══════════════════════════════════════════════════════ */
+function renderMargin(data) {
+  const el = $('marginChart');
+  if (!data.length) {
+    el.parentElement.innerHTML = '<div class="no-data">無融資融券資料</div>';
+    return;
+  }
+  const labels = data.map(d => d.date.slice(5));
+  cj['margin'] = new Chart(el.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: '融資餘額',
+          data: data.map(d => d.margin_balance),
+          borderColor: '#f85149', backgroundColor: 'rgba(248,81,73,0.08)',
+          borderWidth: 2, pointRadius: 0, fill: true, tension: 0.2, yAxisID: 'y',
+        },
+        {
+          label: '融券餘額',
+          data: data.map(d => d.short_balance),
+          borderColor: '#3fb950', backgroundColor: 'rgba(63,185,80,0.08)',
+          borderWidth: 2, pointRadius: 0, fill: true, tension: 0.2, yAxisID: 'y1',
+        },
+      ]
+    },
+    options: {
+      ...CJ_OPTS,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: CJ_OPTS.scales.x,
+        y: {
+          type: 'linear', position: 'left',
+          ticks: { color: '#f85149', font: { size: 10 } },
+          grid: { color: '#21262d' },
+        },
+        y1: {
+          type: 'linear', position: 'right',
+          ticks: { color: '#3fb950', font: { size: 10 } },
+          grid: { drawOnChartArea: false },
+        },
+      }
+    }
+  });
+}
+
+/* ═══════════════════════════════════════════════════════
+   Init
+═══════════════════════════════════════════════════════ */
+loadCBList();
+</script>
+</body>
+</html>

@@ -1,0 +1,61 @@
+name: 每日資料更新
+
+on:
+  # 每天台灣時間 18:30（UTC 10:30）自動執行，收盤後抓當日資料
+  schedule:
+    - cron: "30 10 * * 1-5"   # 週一到週五
+
+  # 手動觸發（測試用）
+  workflow_dispatch:
+    inputs:
+      init_mode:
+        description: '初始化模式（首次下載全量歷史）'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+      init_years:
+        description: '初始化年數（預設 3）'
+        required: false
+        default: '3'
+
+jobs:
+  update-db:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60       # 最多執行 60 分鐘
+
+    steps:
+      - name: 📥 Checkout 程式碼
+        uses: actions/checkout@v4
+
+      - name: 🐍 設定 Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: 📦 安裝相依套件
+        run: pip install -r requirements.txt
+
+      - name: 🗄️ 執行每日資料更新
+        env:
+          DATABASE_URL:    ${{ secrets.DATABASE_URL }}
+          FINMIND_TOKEN:   ${{ secrets.FINMIND_TOKEN }}
+        run: |
+          if [ "${{ github.event.inputs.init_mode }}" = "true" ]; then
+            echo "=== 初始化模式：下載 ${{ github.event.inputs.init_years }} 年歷史資料 ==="
+            python db_updater.py --init --years ${{ github.event.inputs.init_years }}
+          else
+            echo "=== 每日增量更新 ==="
+            python db_updater.py
+          fi
+
+      - name: ✅ 更新完成通知
+        if: success()
+        run: echo "資料更新成功！$(date '+%Y-%m-%d %H:%M:%S')"
+
+      - name: ❌ 失敗通知
+        if: failure()
+        run: echo "資料更新失敗，請檢查 logs！"
