@@ -564,10 +564,10 @@ async function loadDetail(cbId, stockId) {
 
   const [kline, cbPriceData, shData, instData, marginData] = await Promise.all([
     fetch(`/api/stock/${stockId}/kline?days=1000`).then(r => r.json()).catch(() => []),
-    fetch(`/api/cb/${cbId}/price?days=1000`).then(r => r.json()).catch(() => []),
-    fetch(`/api/stock/${stockId}/shareholding?weeks=200`).then(r => r.json()).catch(() => []),
-    fetch(`/api/stock/${stockId}/inst?days=1000`).then(r => r.json()).catch(() => []),
-    fetch(`/api/stock/${stockId}/margin?days=1000`).then(r => r.json()).catch(() => []),
+    fetch(`/api/cb/${cbId}/price?days=120`).then(r => r.json()).catch(() => []),
+    fetch(`/api/stock/${stockId}/shareholding?weeks=60`).then(r => r.json()).catch(() => []),
+    fetch(`/api/stock/${stockId}/inst?days=60`).then(r => r.json()).catch(() => []),
+    fetch(`/api/stock/${stockId}/margin?days=60`).then(r => r.json()).catch(() => []),
   ]);
 
   renderStockKline(kline);
