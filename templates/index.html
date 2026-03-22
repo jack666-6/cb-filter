@@ -9,17 +9,17 @@
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
-  --bg:     #0d1117;
-  --bg2:    #161b22;
-  --bg3:    #21262d;
-  --border: #30363d;
-  --text:   #e6edf3;
-  --muted:  #8b949e;
-  --blue:   #58a6ff;
-  --green:  #3fb950;
-  --red:    #f85149;
-  --yellow: #d29922;
-  --purple: #bc8cff;
+  --bg:     #f6f8fa;
+  --bg2:    #ffffff;
+  --bg3:    #eef1f4;
+  --border: #d0d7de;
+  --text:   #1f2328;
+  --muted:  #656d76;
+  --blue:   #0969da;
+  --green:  #1a7f37;
+  --red:    #cf222e;
+  --yellow: #9a6700;
+  --purple: #8250df;
 }
 body {
   background: var(--bg);
@@ -145,7 +145,7 @@ th.sort-asc::after  { content: ' ▲'; color: var(--blue); }
 th.sort-desc::after { content: ' ▼'; color: var(--blue); }
 td {
   padding: 9px 12px;
-  border-bottom: 1px solid rgba(48,54,61,0.5);
+  border-bottom: 1px solid rgba(208,215,222,0.6);
   font-size: 13px;
   white-space: nowrap;
 }
@@ -397,20 +397,20 @@ const CJ_OPTS = {
   maintainAspectRatio: false,
   animation: false,
   plugins: {
-    legend: { labels: { color: '#8b949e', boxWidth: 12, font: { size: 11 } } },
+    legend: { labels: { color: '#656d76', boxWidth: 12, font: { size: 11 } } },
     tooltip: { mode: 'index', intersect: false }
   },
   scales: {
-    x: { ticks: { color: '#8b949e', maxTicksLimit: 8, font: { size: 10 } }, grid: { color: '#21262d' } },
-    y: { ticks: { color: '#8b949e', font: { size: 10 } }, grid: { color: '#21262d' } }
+    x: { ticks: { color: '#656d76', maxTicksLimit: 8, font: { size: 10 } }, grid: { color: '#eef1f4' } },
+    y: { ticks: { color: '#656d76', font: { size: 10 } }, grid: { color: '#eef1f4' } }
   }
 };
 
 const LW_THEME = {
-  layout: { background: { color: '#161b22' }, textColor: '#8b949e' },
-  grid:   { vertLines: { color: '#21262d' }, horzLines: { color: '#21262d' } },
-  rightPriceScale: { borderColor: '#30363d' },
-  timeScale: { borderColor: '#30363d', timeVisible: false }
+  layout: { background: { color: '#ffffff' }, textColor: '#656d76' },
+  grid:   { vertLines: { color: '#eef1f4' }, horzLines: { color: '#eef1f4' } },
+  rightPriceScale: { borderColor: '#d0d7de' },
+  timeScale: { borderColor: '#d0d7de', timeVisible: false }
 };
 
 /* ═══════════════════════════════════════════════════════
@@ -593,9 +593,9 @@ function renderStockKline(data) {
   });
 
   const candle = chart.addCandlestickSeries({
-    upColor: '#f85149', downColor: '#3fb950',
-    borderUpColor: '#f85149', borderDownColor: '#3fb950',
-    wickUpColor:   '#f85149', wickDownColor:   '#3fb950',
+    upColor: '#E8464D', downColor: '#26A65B',
+    borderUpColor: '#E8464D', borderDownColor: '#26A65B',
+    wickUpColor:   '#E8464D', wickDownColor:   '#26A65B',
   });
   candle.setData(data.map(d => ({
     time: d.date, open: +d.open, high: +d.high, low: +d.low, close: +d.close
@@ -621,9 +621,9 @@ function renderStockKline(data) {
     }).filter(Boolean);
   }
   const closes = data.map(d => ({ date: d.date, close: +d.close }));
-  const ma5  = chart.addLineSeries({ color: '#f0e68c', lineWidth: 1, title: 'MA5',  priceLineVisible: false, lastValueVisible: true });
-  const ma20 = chart.addLineSeries({ color: '#ff8c00', lineWidth: 1, title: 'MA20', priceLineVisible: false, lastValueVisible: true });
-  const ma60 = chart.addLineSeries({ color: '#00bfff', lineWidth: 1, title: 'MA60', priceLineVisible: false, lastValueVisible: true });
+  const ma5  = chart.addLineSeries({ color: '#e67e22', lineWidth: 1, title: 'MA5',  priceLineVisible: false, lastValueVisible: false });
+  const ma20 = chart.addLineSeries({ color: '#9b59b6', lineWidth: 1, title: 'MA20', priceLineVisible: false, lastValueVisible: false });
+  const ma60 = chart.addLineSeries({ color: '#2980b9', lineWidth: 1, title: 'MA60', priceLineVisible: false, lastValueVisible: false });
   ma5.setData(calcMA(closes, 5));
   ma20.setData(calcMA(closes, 20));
   ma60.setData(calcMA(closes, 60));
