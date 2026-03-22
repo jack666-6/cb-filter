@@ -291,20 +291,24 @@ def run_update(init_mode: bool = False, init_years: int = 3):
     cb_price_start = hist_start if init_mode else days_ago(5)
     update_cb_prices(cb_price_start, end)
 
-    # Step 3: 個股四表
-    all_stocks = db.get_all_cb_stocks()
-    if not all_stocks:
-        all_stocks = sorted({r["stock_id"] for r in cb_rows})
+    # Step 3: 個股四表（週末跳過）
+    weekday = datetime.now().weekday()  # 0=Mon, 5=Sat, 6=Sun
+    if not init_mode and weekday >= 5:
+        print(f"\n[Step 3] 今天是週末，跳過個股資料更新。")
+    else:
+        all_stocks = db.get_all_cb_stocks()
+        if not all_stocks:
+            all_stocks = sorted({r["stock_id"] for r in cb_rows})
 
-    print(f"\n[Step 3] Updating {len(all_stocks)} stocks...")
-    for i, sid in enumerate(all_stocks, 1):
-        print(f"  [{i:3d}/{len(all_stocks)}] {sid}")
-        start = hist_start if init_mode else hist_start
-        try:
-            update_stock(sid, start, end)
-        except Exception as e:
-            print(f"    [ERROR] {e}")
-            db.log_sync("stock_price", 0, sid, status="error", message=str(e))
+        print(f"\n[Step 3] Updating {len(all_stocks)} stocks...")
+        for i, sid in enumerate(all_stocks, 1):
+            print(f"  [{i:3d}/{len(all_stocks)}] {sid}")
+            start = hist_start if init_mode else hist_start
+            try:
+                update_stock(sid, start, end)
+            except Exception as e:
+                print(f"    [ERROR] {e}")
+                db.log_sync("stock_price", 0, sid, status="error", message=str(e))
 
     # Step 4: 統計
     stats = db.get_db_stats()
