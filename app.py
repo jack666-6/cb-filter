@@ -60,24 +60,31 @@ def api_cbs():
             cp.cb_id,
             cp.stock_id,
             cl.cb_name,
-            ROUND(cp.reference_price::numeric, 2)         AS cb_price,
-            ROUND(cp.conversion_price::numeric, 2)        AS conversion_price,
+            ROUND(cp.reference_price::numeric, 2)                  AS cb_price,
+            ROUND(cl.conversion_price::numeric, 2)                 AS conversion_price,
             cl.due_date,
-            ROUND(sp.close::numeric, 2)                   AS stock_close,
-            ROUND(
-                (cp.reference_price / (sp.close / cp.conversion_price * 100) - 1) * 100
-            , 2)                                          AS premium,
-            ROUND(sh.big_holder_pct::numeric, 2)          AS big,
-            ROUND(sh.retail_pct::numeric, 2)              AS small,
-            sh.shareholders                               AS holders
+            ROUND(sp.close::numeric, 2)                            AS stock_close,
+            CASE
+                WHEN cl.conversion_price > 0 AND sp.close > 0 THEN
+                    ROUND(
+                        (cp.reference_price / (sp.close / cl.conversion_price * 100) - 1) * 100
+                    , 2)
+                ELSE NULL
+            END                                                    AS premium,
+            ROUND(sh.big_holder_pct::numeric, 2)                   AS big,
+            ROUND(sh.retail_pct::numeric, 2)                       AS small,
+            sh.shareholders                                        AS holders
         FROM cb_price cp
         JOIN (
             SELECT cb_id, MAX(date) AS d FROM cb_price GROUP BY cb_id
         ) mcp ON cp.cb_id = mcp.cb_id AND cp.date = mcp.d
-        JOIN cb_list cl ON cp.cb_id = cl.cb_id
         JOIN (
-            SELECT stock_id, MAX(updated_date) AS d FROM cb_list GROUP BY stock_id
-        ) mcl ON cl.stock_id = mcl.stock_id AND cl.updated_date = mcl.d
+            SELECT cb_id, stock_id, cb_name, conversion_price, due_date, updated_date
+            FROM cb_list cl2
+            WHERE updated_date = (
+                SELECT MAX(updated_date) FROM cb_list WHERE cb_id = cl2.cb_id
+            )
+        ) cl ON cp.cb_id = cl.cb_id
         JOIN (
             SELECT stock_id, MAX(date) AS d FROM stock_price GROUP BY stock_id
         ) msp ON cp.stock_id = msp.stock_id
@@ -89,7 +96,6 @@ def api_cbs():
                 SELECT stock_id, MAX(date) AS d FROM shareholding GROUP BY stock_id
             ) ms ON s.stock_id = ms.stock_id AND s.date = ms.d
         ) sh ON cp.stock_id = sh.stock_id
-        WHERE cp.conversion_price > 0
         ORDER BY cp.cb_id
     """)
 
