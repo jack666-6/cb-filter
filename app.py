@@ -67,7 +67,7 @@ def api_cbs():
             CASE
                 WHEN cl.conversion_price > 0 AND sp.close > 0 THEN
                     ROUND(
-                        (cp.reference_price / (sp.close / cl.conversion_price * 100) - 1) * 100
+                        ((cp.reference_price / (sp.close / cl.conversion_price * 100) - 1) * 100)::numeric
                     , 2)
                 ELSE NULL
             END                                                    AS premium,
@@ -136,7 +136,7 @@ def cb_price(cid):
         SELECT
             cp.date::text AS date,
             cp.reference_price,
-            ROUND((sp.close / cp.conversion_price * 100)::numeric, 2) AS theoretical
+            ROUND(((sp.close / NULLIF(cp.conversion_price,0)) * 100)::numeric, 2) AS theoretical
         FROM cb_price cp
         LEFT JOIN stock_price sp
                ON cp.stock_id = sp.stock_id AND cp.date = sp.date
