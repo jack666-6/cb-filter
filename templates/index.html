@@ -501,7 +501,7 @@ function renderTable(data, skipCountUpdate = false) {
     const premHtml = d.premium != null
       ? `<span class="${d.premium > 0 ? 'pos' : 'neg'}">${d.premium > 0 ? '+' : ''}${fmt(d.premium)}%</span>`
       : '<span style="color:var(--muted)">—</span>';
-    return `<tr onclick="selectCB(this,'${d.cb_id}','${d.stock_id}',${JSON.stringify(d).replace(/'/g,"\\'")})"
+    return `<tr onclick="selectCBById('${d.cb_id}')"
                data-cbid="${d.cb_id}">
       <td><span class="cb-id">${d.cb_id}</span></td>
       <td><span class="cb-name">${d.cb_name || '—'}</span></td>
@@ -527,6 +527,13 @@ function renderTable(data, skipCountUpdate = false) {
 /* ═══════════════════════════════════════════════════════
    Select CB → load detail
 ═══════════════════════════════════════════════════════ */
+function selectCBById(cbId) {
+  const d = tableData.find(x => x.cb_id === cbId);
+  if (!d) return;
+  const row = document.querySelector(`tr[data-cbid="${cbId}"]`);
+  selectCB(row, cbId, d.stock_id, d);
+}
+
 function selectCB(row, cbId, stockId, d) {
   document.querySelectorAll('tbody tr').forEach(r => r.classList.remove('selected'));
   row.classList.add('selected');
