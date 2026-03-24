@@ -198,6 +198,7 @@ def upsert_cb_price(rows: list) -> int:
         INSERT INTO cb_price (cb_id, stock_id, date, reference_price, conversion_price, coupon_rate)
         VALUES (%(cb_id)s, %(stock_id)s, %(date)s, %(reference_price)s, %(conversion_price)s, %(coupon_rate)s)
         ON CONFLICT (cb_id, date) DO UPDATE SET
+            stock_id=EXCLUDED.stock_id,
             reference_price=EXCLUDED.reference_price,
             conversion_price=EXCLUDED.conversion_price,
             coupon_rate=EXCLUDED.coupon_rate

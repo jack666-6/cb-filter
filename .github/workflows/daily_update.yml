@@ -53,6 +53,17 @@ jobs:
             python -u db_updater.py
           fi
 
+      - name: 🧹 清除 API 快取
+        if: success()
+        env:
+          RENDER_URL: ${{ secrets.RENDER_URL }}
+        run: |
+          if [ -n "$RENDER_URL" ]; then
+            curl -s -X POST "$RENDER_URL/api/cache/clear" && echo "快取已清除"
+          else
+            echo "未設定 RENDER_URL，跳過快取清除"
+          fi
+
       - name: ✅ 更新完成通知
         if: success()
         run: echo "資料更新成功！$(date '+%Y-%m-%d %H:%M:%S')"
