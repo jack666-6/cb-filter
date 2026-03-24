@@ -118,14 +118,14 @@ def update_cb_prices(start: str, end: str):
         stock_id = cb_id[:4]
         ref_price = item.get("ReferencePrice")
         conv_price = item.get("ConversionPrice")
-        if not ref_price or not conv_price:
+        if not ref_price:          # 只要求 CB 市場價格，轉換價從 cb_list 抓
             continue
         rows.append({
             "cb_id":            cb_id,
             "stock_id":         stock_id,
             "date":             item.get("date", ""),
             "reference_price":  float(ref_price),
-            "conversion_price": float(conv_price),
+            "conversion_price": float(conv_price) if conv_price else 0.0,
             "coupon_rate":      float(item.get("CouponRate", 0) or 0),
         })
 
