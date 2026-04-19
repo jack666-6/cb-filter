@@ -290,6 +290,7 @@ tr.selected td { background: rgba(88,166,255,0.1) !important; }
         <div class="row" style="gap:8px">
           <button class="btn-search" onclick="applyFilter()">篩選</button>
           <button class="btn-clear"  onclick="clearFilter()">清除</button>
+          <button class="btn-clear"  onclick="exportCSV()">匯出 CSV</button>
         </div>
       </div>
 
@@ -432,6 +433,15 @@ function clearFilter() {
   ['pmin','pmax','cmin','cmax'].forEach(id => $(id).value = '');
   document.querySelectorAll('.btn-preset').forEach(b => b.classList.remove('active'));
   loadCBList();
+}
+function exportCSV() {
+  if (!tableData || !tableData.length) { alert('沒有資料可匯出'); return; }
+  const rows = [['CB代號','名稱'], ...tableData.map(r => [r.cb_id, r.cb_name || ''])];
+  const csv = rows.map(r => r.join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,\uFEFF' + encodeURIComponent(csv);
+  a.download = 'cb_list.csv';
+  a.click();
 }
 function applyFilter() {
   const p = new URLSearchParams();

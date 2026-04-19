@@ -16,12 +16,15 @@ import argparse
 import re
 import time
 from datetime import datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
 import config
 import db_manager_pg as db
 import data_fetcher as fetcher
+
+MAX_WORKERS = 5   # 並行執行緒數（太高容易被 FinMind 限速）
 
 
 def today() -> str:
@@ -86,8 +89,25 @@ def fetch_cb_list() -> list:
 # ======================================================
 # 2. CB 每日報價更新
 # ======================================================
-def fetch_cb_price_list(start: str, end: str) -> list:
-    """從 TaiwanStockConvertibleBondDailyOverview 取 CB 每日報價"""
+def fetch_cb_price_for_date(date: str) -> list:
+    """查詢單一日期的全市場 CB 報價（與 n8n 相同做法：start=end=today）"""
+    params = {
+        "dataset":    "TaiwanStockConvertibleBondDailyOverview",
+        "start_date": date,
+        "end_date":   date,
+    }
+    headers = {"Authorization": config.FINMIND_TOKEN}
+    try:
+        resp = requests.get(config.FINMIND_API, params=params, headers=headers, timeout=60)
+        resp.raise_for_status()
+        return resp.json().get("data", [])
+    except Exception as e:
+        print(f"  [ERROR] CB price {date}: {e}")
+        return []
+
+
+def fetch_cb_price_bulk(start: str, end: str) -> list:
+    """批次查詢 CB 報價（用於 init 初始化模式）"""
     params = {
         "dataset":    "TaiwanStockConvertibleBondDailyOverview",
         "start_date": start,
@@ -99,43 +119,71 @@ def fetch_cb_price_list(start: str, end: str) -> list:
         resp.raise_for_status()
         return resp.json().get("data", [])
     except Exception as e:
-        print(f"  [ERROR] CB price: {e}")
+        print(f"  [ERROR] CB price bulk: {e}")
         return []
 
 
-def update_cb_prices(start: str, end: str):
-    """更新所有 CB 每日市場報價"""
-    raw = fetch_cb_price_list(start, end)
-    if not raw:
-        print("  No CB price data.")
-        return
-
+def _parse_cb_price_rows(raw: list) -> list:
+    """將 API 回傳資料轉成 DB 格式"""
     rows = []
     for item in raw:
         cb_id = str(item.get("cb_id", "")).strip()
         if len(cb_id) < 4:
             continue
-        stock_id = cb_id[:4]
         ref_price = item.get("ReferencePrice")
-        conv_price = item.get("ConversionPrice")
-        if not ref_price:          # 只要求 CB 市場價格，轉換價從 cb_list 抓
+        if not ref_price:
             continue
+        conv_price = item.get("ConversionPrice")
         rows.append({
             "cb_id":            cb_id,
-            "stock_id":         stock_id,
+            "stock_id":         cb_id[:4],
             "date":             item.get("date", ""),
             "reference_price":  float(ref_price),
             "conversion_price": float(conv_price) if conv_price else 0.0,
             "coupon_rate":      float(item.get("CouponRate", 0) or 0),
         })
+    return rows
 
-    n = db.upsert_cb_price(rows)
-    db.log_sync("cb_price", n)
-    print(f"  CB prices: +{n} rows")
+
+def update_cb_prices(start: str, end: str, init_mode: bool = False):
+    """更新所有 CB 每日市場報價
+    - init_mode: 使用批次查詢（歷史資料）
+    - 一般模式: 逐日查詢（與 n8n 相同，確保拿到當天最新資料）
+    """
+    if init_mode:
+        # 初始化：一次批次抓歷史資料
+        raw = fetch_cb_price_bulk(start, end)
+        rows = _parse_cb_price_rows(raw)
+        if not rows:
+            print("  No CB price data.")
+            return
+        n = db.upsert_cb_price(rows)
+        db.log_sync("cb_price", n)
+        print(f"  CB prices: +{n} rows")
+    else:
+        # 每日更新：逐日查詢，確保拿到最新當天資料
+        current = datetime.strptime(start, "%Y-%m-%d")
+        end_dt  = datetime.strptime(end, "%Y-%m-%d")
+        total   = 0
+        while current <= end_dt:
+            if current.weekday() < 5:  # 跳過週末
+                date_str = current.strftime("%Y-%m-%d")
+                raw  = fetch_cb_price_for_date(date_str)
+                rows = _parse_cb_price_rows(raw)
+                if rows:
+                    n = db.upsert_cb_price(rows)
+                    total += n
+                    print(f"  {date_str}: +{n} rows")
+                else:
+                    print(f"  {date_str}: 無資料")
+                time.sleep(0.5)
+            current += timedelta(days=1)
+        db.log_sync("cb_price", total)
+        print(f"  CB prices total: +{total} rows")
 
 
 # ======================================================
-# 3. 個股四表增量更新
+# 3. 個股四表更新
 # ======================================================
 def _parse_shareholding(stock_id: str, raw: list) -> list:
     def parse_bounds(level: str):
@@ -196,70 +244,89 @@ def _parse_shareholding(stock_id: str, raw: list) -> list:
     return rows
 
 
-def update_stock(stock_id: str, start_date: str, end_date: str):
-    # ---- 股價 ----
-    latest = db.get_latest_date("stock_price", stock_id)
-    s = (datetime.strptime(latest, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d") \
-        if latest else start_date
-    if s <= end_date:
-        raw = fetcher.fetch_stock_price(stock_id, s, end_date)
-        if not raw.empty:
-            rows = [{"stock_id": stock_id, "date": r["date"].strftime("%Y-%m-%d"),
-                     "open": r["open"], "high": r["high"], "low": r["low"],
-                     "close": r["close"], "volume": r["volume"]}
-                    for _, r in raw.iterrows()]
-            n = db.upsert_prices(rows)
-            db.log_sync("stock_price", n, stock_id)
-            print(f"    price:  +{n}")
-        time.sleep(0.3)
+def _fetch_one_stock(sid: str, start: str, end: str) -> dict:
+    """單支股票四表全抓（供並行使用）"""
+    result = {"sid": sid, "price": [], "inst": [], "margin": [], "share": []}
+    try:
+        # 股價
+        raw = fetcher._get("TaiwanStockPrice", sid, start, end)
+        for r in (raw or []):
+            vol = float(r.get("Trading_Volume", 0) or 0)
+            result["price"].append({
+                "stock_id": sid, "date": r.get("date", ""),
+                "open":  float(r.get("open", 0) or 0),
+                "high":  float(r.get("max",  0) or 0),
+                "low":   float(r.get("min",  0) or 0),
+                "close": float(r.get("close",0) or 0),
+                "volume": vol / 1000 if vol > 100_000 else vol,
+            })
 
-    # ---- 三大法人 ----
-    latest = db.get_latest_date("institutional", stock_id)
-    s = (datetime.strptime(latest, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d") \
-        if latest else start_date
-    if s <= end_date:
-        raw = fetcher.fetch_institutional(stock_id, s, end_date)
-        if not raw.empty:
-            rows = [{"stock_id": stock_id, "date": r["date"].strftime("%Y-%m-%d"),
-                     "foreign_net": r.get("foreign", 0), "trust_net": r.get("trust", 0),
-                     "dealer_net": r.get("dealer", 0), "inst_total": r.get("inst_total", 0)}
-                    for _, r in raw.iterrows()]
-            n = db.upsert_institutional(rows)
-            db.log_sync("institutional", n, stock_id)
-            print(f"    inst:   +{n}")
-        time.sleep(0.3)
+        # 三大法人
+        raw = fetcher._get("TaiwanStockInstitutionalInvestorsBuySell", sid, start, end)
+        daily = {}
+        for r in (raw or []):
+            date = r.get("date", ""); name = r.get("name", "")
+            if not date: continue
+            daily.setdefault(date, {"stock_id": sid, "date": date,
+                                    "foreign_net": 0.0, "trust_net": 0.0,
+                                    "dealer_net": 0.0, "inst_total": 0.0})
+            net = ((r.get("buy", 0) or 0) - (r.get("sell", 0) or 0)) / 1000
+            if   "Foreign" in name: daily[date]["foreign_net"] += net
+            elif "Trust"   in name: daily[date]["trust_net"]   += net
+            elif "Dealer"  in name: daily[date]["dealer_net"]  += net
+        for r in daily.values():
+            r["inst_total"] = r["foreign_net"] + r["trust_net"] + r["dealer_net"]
+        result["inst"] = list(daily.values())
 
-    # ---- 集保（週度）----
-    latest = db.get_latest_date("shareholding", stock_id)
-    s = (datetime.strptime(latest, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d") \
-        if latest else start_date
-    if s <= end_date:
-        try:
-            raw_sh = fetcher._get("TaiwanStockHoldingSharesPer", stock_id, s, end_date)
-        except Exception:
-            raw_sh = []
-        if raw_sh:
-            rows = _parse_shareholding(stock_id, raw_sh)
-            n = db.upsert_shareholding(rows)
-            db.log_sync("shareholding", n, stock_id)
-            print(f"    share:  +{n}")
-        time.sleep(0.3)
+        # 融資融券
+        raw = fetcher._get("TaiwanStockMarginPurchaseShortSale", sid, start, end)
+        result["margin"] = [{"stock_id": sid, "date": r.get("date", ""),
+                              "margin_balance": r.get("MarginPurchaseTodayBalance", 0),
+                              "short_balance":  r.get("ShortSaleTodayBalance", 0)}
+                             for r in (raw or [])]
 
-    # ---- 融資融券 ----
-    latest = db.get_latest_date("margin", stock_id)
-    s = (datetime.strptime(latest, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d") \
-        if latest else start_date
-    if s <= end_date:
-        raw = fetcher.fetch_margin(stock_id, s, end_date)
-        if not raw.empty:
-            rows = [{"stock_id": stock_id, "date": r["date"].strftime("%Y-%m-%d"),
-                     "margin_balance": r.get("margin_balance", 0),
-                     "short_balance": r.get("short_balance", 0)}
-                    for _, r in raw.iterrows()]
-            n = db.upsert_margin(rows)
-            db.log_sync("margin", n, stock_id)
-            print(f"    margin: +{n}")
-        time.sleep(0.3)
+        # 集保
+        raw = fetcher._get("TaiwanStockHoldingSharesPer", sid, start, end)
+        if raw:
+            result["share"] = _parse_shareholding(sid, raw)
+
+    except Exception as e:
+        print(f"    [ERROR] {sid}: {e}")
+    return result
+
+
+def update_stocks_batch(all_stocks: list, start: str, end: str):
+    """並行更新所有股票四表（ThreadPoolExecutor，最多 MAX_WORKERS 個同時請求）"""
+    total_price = total_inst = total_margin = total_share = 0
+    n = len(all_stocks)
+    done = 0
+
+    all_price = []; all_inst = []; all_margin = []; all_share = []
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = {executor.submit(_fetch_one_stock, sid, start, end): sid
+                   for sid in all_stocks}
+        for future in as_completed(futures):
+            res = future.result()
+            all_price  += res["price"]
+            all_inst   += res["inst"]
+            all_margin += res["margin"]
+            all_share  += res["share"]
+            done += 1
+            if done % 50 == 0:
+                print(f"  [{done}/{n}] 完成...")
+
+    # 一次性寫入 DB
+    if all_price:  total_price  = db.upsert_prices(all_price)
+    if all_inst:   total_inst   = db.upsert_institutional(all_inst)
+    if all_margin: total_margin = db.upsert_margin(all_margin)
+    if all_share:  total_share  = db.upsert_shareholding(all_share)
+
+    db.log_sync("stock_price",   total_price)
+    db.log_sync("institutional", total_inst)
+    db.log_sync("margin",        total_margin)
+    db.log_sync("shareholding",  total_share)
+    print(f"  [OK] price:+{total_price}  inst:+{total_inst}  margin:+{total_margin}  share:+{total_share}")
 
 
 # ======================================================
@@ -288,10 +355,10 @@ def run_update(init_mode: bool = False, init_years: int = 3):
 
     # Step 2: CB 每日報價
     print("\n[Step 2] CB 每日報價...")
-    cb_price_start = hist_start if init_mode else days_ago(5)
-    update_cb_prices(cb_price_start, end)
+    cb_price_start = hist_start if init_mode else days_ago(3)
+    update_cb_prices(cb_price_start, end, init_mode=init_mode)
 
-    # Step 3: 個股四表（週末跳過）
+    # Step 3: 個股四表
     weekday = datetime.now().weekday()  # 0=Mon, 5=Sat, 6=Sun
     if not init_mode and weekday >= 5:
         print(f"\n[Step 3] 今天是週末，跳過個股資料更新。")
@@ -300,15 +367,12 @@ def run_update(init_mode: bool = False, init_years: int = 3):
         if not all_stocks:
             all_stocks = sorted({r["stock_id"] for r in cb_rows})
 
-        print(f"\n[Step 3] Updating {len(all_stocks)} stocks...")
-        for i, sid in enumerate(all_stocks, 1):
-            print(f"  [{i:3d}/{len(all_stocks)}] {sid}")
-            start = hist_start if init_mode else hist_start
-            try:
-                update_stock(sid, start, end)
-            except Exception as e:
-                print(f"    [ERROR] {e}")
-                db.log_sync("stock_price", 0, sid, status="error", message=str(e))
+        stock_start = hist_start if init_mode else days_ago(3)
+        print(f"\n[Step 3] 更新 {len(all_stocks)} 支股票（{stock_start} ~ {end}）...")
+        try:
+            update_stocks_batch(all_stocks, stock_start, end)
+        except Exception as e:
+            print(f"  [ERROR] {e}")
 
     # Step 4: 統計
     stats = db.get_db_stats()
